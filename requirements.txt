@@ -1,0 +1,6 @@
+cbor==1.0.0
+coppeliasim_zmqremoteapi_client==2.0.4
+numpy==2.2.2
+opencv-contrib-python==4.11.0.86
+opencv-python==4.11.0.86
+pyzmq==26.2.1
