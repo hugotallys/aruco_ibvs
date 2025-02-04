@@ -5,13 +5,21 @@ import cv2.aruco as aruco
 from camera import CentralCamera
 from coppelia_utils import CoppeliaSimAPI
 
+# Global variables for slider values
+top_left_x = 200
+top_left_y = 200
+size = 111
+
+# ArUco dictionary and parameters
 ARUCO_DICT = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
 PARAMETERS = aruco.DetectorParameters()
 
 def get_target_corners(top_left=(200, 200), size=111):
     """
-    Get the corndes of the target image
-    :return: Corners of the target aruco image
+    Get the corners of the target image.
+    :param top_left: Top-left corner of the target (u, v).
+    :param size: Size of the target (width and height).
+    :return: Corners of the target ArUco image.
     """
     return np.array([
         top_left,
@@ -83,7 +91,6 @@ def detect_aruco(image, camera_matrix, dist_coeffs, marker_length=0.1):
     :param image: Input image as a numpy array.
     :return: Image with detected ArUco markers highlighted.
     """
-
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
@@ -104,7 +111,7 @@ def detect_aruco(image, camera_matrix, dist_coeffs, marker_length=0.1):
         draw_pose(image, rvec, tvec, camera_matrix, dist_coeffs)
 
         # List of points (u, v) representing the polygon
-        points = get_target_corners()
+        points = get_target_corners((top_left_x, top_left_y), size)
         corners = np.squeeze(corners)
 
         central_point = np.mean(corners, axis=0)
@@ -120,6 +127,20 @@ def detect_aruco(image, camera_matrix, dist_coeffs, marker_length=0.1):
     
     return image, (central_point, dP), Z, ids is not None
 
+def on_trackbar_x(val):
+    """
+    Callback function for the X slider.
+    """
+    global top_left_x
+    top_left_x = val
+
+def on_trackbar_y(val):
+    """
+    Callback function for the Y slider.
+    """
+    global top_left_y
+    top_left_y = val
+
 def main():
     # Initialize CoppeliaSim API
     coppelia = CoppeliaSimAPI()
@@ -130,6 +151,13 @@ def main():
     f_rho = 512 / (2 * np.tan(np.pi / 6))
 
     cam = CentralCamera(f=f_rho, pp=(256, 256), res=(512, 512))
+
+    # Create a window for the sliders
+    cv2.namedWindow('ArUco Detection')
+
+    # Create trackbars for adjusting the target position
+    cv2.createTrackbar('Top Left X', 'ArUco Detection', top_left_x, 512, on_trackbar_x)
+    cv2.createTrackbar('Top Left Y', 'ArUco Detection', top_left_y, 512, on_trackbar_y)
 
     try:
         coppelia.set_vision_sensor_handle('/visionSensor')
