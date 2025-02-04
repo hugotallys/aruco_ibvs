@@ -67,7 +67,7 @@ class CentralCamera:
 
         # print(f"u: {u}, v: {v}")
 
-        # Z = Z[0]
+        Z = Z[0]
 
         J = np.array([
             [-f_rho / Z, 0, u / Z, u * v / f_rho, -(f_rho ** 2 + u ** 2) / f_rho, v],

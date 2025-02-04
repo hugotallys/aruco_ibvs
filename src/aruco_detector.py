@@ -8,7 +8,7 @@ from coppelia_utils import CoppeliaSimAPI
 ARUCO_DICT = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
 PARAMETERS = aruco.DetectorParameters()
 
-def get_target_corners(top_left=(64, 64), size=111):
+def get_target_corners(top_left=(200, 200), size=111):
     """
     Get the corndes of the target image
     :return: Corners of the target aruco image
@@ -89,32 +89,36 @@ def detect_aruco(image, camera_matrix, dist_coeffs, marker_length=0.1):
 
     # Detect ArUco markers
     corners, ids, _ = aruco.detectMarkers(gray, ARUCO_DICT, parameters=PARAMETERS)
+    central_point = np.zeros(2)
     dP = np.zeros_like(corners)
-    # Z = 0
+    Z = 0
 
     # If markers are detected, draw them on the image
     if ids is not None:
         # Estimate the pose of the ArUco tag
-        # rvec, tvec, _ = estimate_pose(image, marker_length, camera_matrix, dist_coeffs)
+        rvec, tvec, _ = estimate_pose(image, marker_length, camera_matrix, dist_coeffs)
 
-        # Z = tvec[2]
+        Z = tvec[2]
 
         aruco.drawDetectedMarkers(image, corners, ids)
-        # draw_pose(image, rvec, tvec, camera_matrix, dist_coeffs)
+        draw_pose(image, rvec, tvec, camera_matrix, dist_coeffs)
 
         # List of points (u, v) representing the polygon
         points = get_target_corners()
         corners = np.squeeze(corners)
 
+        central_point = np.mean(corners, axis=0)
+        central_target = np.mean(points, axis=0)
+
         l = 0.01
-        dP = l * (points - corners)
+        dP = l * (central_target - central_point)
 
         # Reshape the points to the required format (N, 1, 2)
         points = points.reshape((-1, 1, 2))
         # Draw the polygon on the image
         cv2.polylines(image, [points], isClosed=True, color=(0, 0, 255), thickness=2)       
     
-    return image, (corners, dP), ids is not None # , Z, ids is not None
+    return image, (central_point, dP), Z, ids is not None
 
 def main():
     # Initialize CoppeliaSim API
@@ -135,21 +139,14 @@ def main():
             image = coppelia.get_image()
 
             # Detect ArUco markers
-            # image, (P, dP), Z, detect = detect_aruco(image, cam.K, np.zeros((5, 1)))
-            image, (P, dP), detect = detect_aruco(image, cam.K, np.zeros((5, 1)))
+            image, (P, dP), Z, detect = detect_aruco(image, cam.K, np.zeros((5, 1)))
 
             if detect:
-                J1 = cam.image_jacobian(P[0, :], 0.4)
-                J2 = cam.image_jacobian(P[1, :], 0.4)
-                J3 = cam.image_jacobian(P[2, :], 0.4)
-                J4 = cam.image_jacobian(P[3, :], 0.4)
-
-                J = np.vstack((J1, J2, J3, J4))
-                dP = dP.flatten()
-
+                J = cam.image_jacobian(P, Z)
+                
                 print(f"P: {P}")
                 print(f"dP: {dP}")
-                print(f"J: {J1}")
+                print(f"J: {J}")
 
                 v = np.linalg.pinv(J) @ dP
 
