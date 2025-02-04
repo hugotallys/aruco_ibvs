@@ -1,5 +1,7 @@
 # aruco_ibvs
 
+![ArUco IBVS](aruco_ibvs.png)
+
 Image based visual servoing using ArUco tags
 
 ## Setup and run the simulation:
