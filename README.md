@@ -20,3 +20,9 @@ pip install -r requirements.txt
 ```console
 python src/aruco_detector.py
 ```
+
+## Run tests
+
+```console
+pytest
+```

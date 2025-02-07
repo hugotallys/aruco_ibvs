@@ -1,0 +1,10 @@
+{
+  "name": "Pytest Debug",
+  "type": "python",
+  "request": "launch",
+  "module": "pytest",
+  "args": ["src/test"],
+  "console": "integratedTerminal",
+  "justMyCode": false,
+  "configurations": []
+}

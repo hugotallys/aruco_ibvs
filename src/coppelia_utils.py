@@ -78,3 +78,7 @@ class CoppeliaSimAPI:
     def get_simulation_time(self):
         """Get the current simulation time."""
         return self.sim.getSimulationTime()
+    
+    def get_vision_sensor_height(self):
+        """Get the height of the vision sensor."""
+        return self.sim.getObjectPosition(self.vision_sensor_handle)[2]

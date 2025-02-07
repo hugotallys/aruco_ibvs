@@ -23,7 +23,21 @@ class CentralCamera:
             [0, 0, 1]
         ])
 
-    def project_points(self, p, camera_pose=None):
+    @classmethod
+    def default_camera(cls):
+        """
+        Create a default camera with the following parameters:
+        - f = 8e-3
+        - rho = 10e-6
+        - pp = (500, 500)
+        - res = (1000, 1000)
+
+        Returns:
+        - CentralCamera object.
+        """
+        return cls(f=8e-3, rho=10e-6, pp=(500, 500), res=(1000, 1000))
+
+    def project_point(self, p, pose=None):
         """
         Project 3D world points into 2D pixel coordinates.
 
@@ -34,19 +48,30 @@ class CentralCamera:
         Returns:
         - Pixel coordinates as a numpy array of shape (2, N).
         """
+        # Make sure P is an array
+        if not isinstance(p, np.ndarray):
+            p = np.array(p)
+
+        p = p.reshape(3, -1)
+
         # Add aditional 1 so p is in homogenous coordinates
         p = np.vstack((p, np.ones(p.shape[1])))
 
         # Apply camera pose (if provided)
-        if camera_pose is not None:
-            p = camera_pose @ p  # Transform points to camera frame
+        if pose is None:
+            pose = np.eye(4)
+        
+        pi = np.hstack((np.eye(3), np.zeros((3, 1))))
 
         # Project points using the intrinsic matrix
-        p_pixel = self.K @ p
+        p_pixel = self.K @ pi @ np.linalg.inv(pose) @ p
+
+        # Normalize the pixel coordinates
+        p_pixel = p_pixel[:2] / p_pixel[2]
 
         return p_pixel
 
-    def image_jacobian(self, p, Z):
+    def visjac_p(self, p, depth):
         """
         Compute the image Jacobian for a set of points.
 
@@ -60,18 +85,16 @@ class CentralCamera:
 
         f_rho = self.f / self.rho
 
+        p = p.squeeze()
+
         u, v = p
 
         u = u - self.pp[0]
-        v = v - self.pp[1] 
-
-        # print(f"u: {u}, v: {v}")
-
-        Z = Z[0]
+        v = v - self.pp[1]
 
         J = np.array([
-            [-f_rho / Z, 0, u / Z, u * v / f_rho, -(f_rho ** 2 + u ** 2) / f_rho, v],
-            [0, -f_rho / Z, v / Z, (f_rho ** 2 + v ** 2) / f_rho, -u * v / f_rho, -u]
+            [-f_rho / depth, 0, u / depth, u * v / f_rho, -(f_rho ** 2 + u ** 2) / f_rho, v],
+            [0, -f_rho / depth, v / depth, (f_rho ** 2 + v ** 2) / f_rho, -u * v / f_rho, -u]
         ])
 
         return J
