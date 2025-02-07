@@ -6,6 +6,12 @@ import math
 from camera import CentralCamera
 from coppelia_utils import CoppeliaSimAPI
 
+class Corners:
+    TOP_LEFT = 0
+    TOP_RIGHT = 1
+    BOTTOM_RIGHT = 2
+    BOTTOM_LEFT = 3
+
 # Global variables for slider values
 top_left_x = 200
 top_left_y = 200
@@ -59,7 +65,7 @@ def draw_target_points(image, points):
     points = points.reshape((-1, 1, 2))
     cv2.polylines(image, [points], isClosed=True, color=(0, 0, 255), thickness=2)
 
-def detect_aruco(image):
+def detect_aruco(image, l=0.01):
     """
     Detect ArUco markers in an image and highlight them.
     """
@@ -73,10 +79,7 @@ def detect_aruco(image):
     if ids is not None:
         # Get rotated target corners
         points = get_target_corners((top_left_x, top_left_y), size, yaw_angle)
-
-        l = 0.001
         dP = l * (points - corners)
-        
         aruco.drawDetectedMarkers(image, corners, ids)
         draw_target_points(image, points)
     
@@ -97,7 +100,7 @@ def on_trackbar_x(val):
     """
     global top_left_x
     top_left_x = val
-    update_image()
+    # update_image()
 
 def on_trackbar_y(val):
     """
@@ -105,7 +108,6 @@ def on_trackbar_y(val):
     """
     global top_left_y
     top_left_y = val
-    update_image()
 
 def on_trackbar_yaw(val):
     """
@@ -113,7 +115,6 @@ def on_trackbar_yaw(val):
     """
     global yaw_angle
     yaw_angle = val
-    update_image()
 
 def main():
     global image, cam, coppelia
@@ -137,21 +138,12 @@ def main():
 
         while True:
             image = coppelia.get_image()
-            image, (P, dP), detect = detect_aruco(image, cam.K, np.zeros((5, 1)))
+            image, (P, dP), detect = detect_aruco(image)
 
             if detect:
                 z = coppelia.get_vision_sensor_height()
-            
-                J1 = cam.image_jacobian(P[0, :], z)
-                J2 = cam.image_jacobian(P[1, :], z)
-                J3 = cam.image_jacobian(P[2, :], z)
-                J4 = cam.image_jacobian(P[3, :], z)
-                
-                J = np.vstack((J1, J2, J3, J4))
-
-                print(f"det(JJT): {np.linalg.det(J @ J.T)}")
-
-                v = np.linalg.pinv(J) @ dP.flatten()
+                J1 = cam.visjac_p(P[Corners.BOTTOM_RIGHT, :], z)
+                v = np.linalg.pinv(J1) @ dP[Corners.BOTTOM_RIGHT].flatten()
             else:
                 v = np.zeros(6)
 
