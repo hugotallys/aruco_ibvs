@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+from quaternion import quaternion, as_float_array
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
 class CoppeliaSimAPI:
@@ -45,31 +46,27 @@ class CoppeliaSimAPI:
         
         return image
     
-    def update_camera_pose(self, camera_velocity):
+    def update_camera_pose(self, camera_velocity, dt=50e-3):
         """
         Update the pose of the camera in the scene.
         :param camera_velocity: Velocity of the camera in the scene as a numpy array (shape: [6]).
         """
         
-        camera_position = self.sim.getObjectPosition(self.vision_sensor_handle)
+        camera_pose = self.sim.getObjectPose(self.vision_sensor_handle)
 
-        camera_position[0] += camera_velocity[0]
-        camera_position[1] += camera_velocity[1]
-        camera_position[2] += camera_velocity[2]
+        position = np.array(camera_pose[0:3])
+        orientation = quaternion(*np.roll(np.array(camera_pose[3:7]), 1))
 
-        # Set the new position of the camera
+        v = camera_velocity[0:3]
+        w = camera_velocity[3:6]
 
-        self.sim.setObjectPosition(self.vision_sensor_handle, camera_position)
-        
-        camera_orientation = self.sim.getObjectOrientation(self.vision_sensor_handle)
+        position += v * dt
+        orientation += 0.5 * orientation * quaternion(0, *w) * dt
+       
+        orientation = np.roll(as_float_array(orientation), -1)
+        camera_pose = position.tolist() + orientation.tolist()
 
-        camera_orientation[0] += camera_velocity[3]
-        camera_orientation[1] += camera_velocity[4]
-        camera_orientation[2] += camera_velocity[5]
-
-        # Set the new orientation of the camera
-
-        self.sim.setObjectOrientation(self.vision_sensor_handle, camera_orientation)
+        self.sim.setObjectPose(self.vision_sensor_handle, camera_pose)
 
     def step_simulation(self):
         """Advance the simulation by one step."""

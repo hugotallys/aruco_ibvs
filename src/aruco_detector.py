@@ -65,7 +65,7 @@ def draw_target_points(image, points):
     points = points.reshape((-1, 1, 2))
     cv2.polylines(image, [points], isClosed=True, color=(0, 0, 255), thickness=2)
 
-def detect_aruco(image, l=0.01):
+def detect_aruco(image, l=.9):
     """
     Detect ArUco markers in an image and highlight them.
     """
@@ -142,8 +142,12 @@ def main():
 
             if detect:
                 z = coppelia.get_vision_sensor_height()
-                J1 = cam.visjac_p(P[Corners.BOTTOM_RIGHT, :], z)
-                v = np.linalg.pinv(J1) @ dP[Corners.BOTTOM_RIGHT].flatten()
+                
+                J1 = cam.visjac_p(P[0, :], z)
+
+                J = np.vstack([J1])
+
+                v = np.linalg.pinv(J) @ dP[0].flatten()
             else:
                 v = np.zeros(6)
 
