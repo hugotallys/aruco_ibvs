@@ -6,84 +6,23 @@ import math
 from camera import CentralCamera
 from coppelia_utils import CoppeliaSimAPI
 
-class Corners:
-    TOP_LEFT = 0
-    TOP_RIGHT = 1
-    BOTTOM_RIGHT = 2
-    BOTTOM_LEFT = 3
+IMAGE_RESOLUTION = 512
+PERSPECTIVE_ANGLE = 60
 
-# Global variables for slider values
-top_left_x = 200
-top_left_y = 200
-size = 111
-yaw_angle = 0  # Rotation angle in degrees
+x = np.linspace(0, 1, IMAGE_RESOLUTION)
+y = np.linspace(0, 1, IMAGE_RESOLUTION)
+_X, _Y = np.meshgrid(x, y)
 
-# ArUco dictionary and parameters
-ARUCO_DICT = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
-PARAMETERS = aruco.DetectorParameters()
-
-def get_target_corners(top_left=(200, 200), size=111, angle=0):
+def draw_markers(image, corners, color):
     """
-    Get the corners of the target image and apply rotation.
-    :param top_left: Top-left corner of the target (u, v).
-    :param size: Size of the target (width and height).
-    :param angle: Rotation angle in degrees.
-    :return: Rotated corners of the target ArUco image.
-    """
-    # Compute center of rectangle
-    center_x = top_left[0] + size / 2
-    center_y = top_left[1] + size / 2
-
-    # Define rectangle points relative to the top-left
-    points = np.array([
-        [top_left[0], top_left[1]],
-        [top_left[0] + size, top_left[1]],
-        [top_left[0] + size, top_left[1] + size],
-        [top_left[0], top_left[1] + size]
-    ])
-
-    # Convert angle to radians
-    angle_rad = np.radians(angle)
-
-    # Rotation matrix
-    rotation_matrix = np.array([
-        [math.cos(angle_rad), -math.sin(angle_rad)],
-        [math.sin(angle_rad), math.cos(angle_rad)]
-    ])
-
-    # Apply rotation to each point around the center
-    rotated_points = np.dot(points - [center_x, center_y], rotation_matrix.T) + [center_x, center_y]
-
-    return rotated_points.astype(int)
-
-def draw_target_points(image, points):
-    """
-    Draw the target points on the image.
+    Draw the detected ArUco markers on the image.
     :param image: Input image as a numpy array.
-    :param points: List of points (u, v) representing the polygon.
+    :param corners: Detected corners of the ArUco markers.
     """
-    points = points.reshape((-1, 1, 2))
-    cv2.polylines(image, [points], isClosed=True, color=(0, 0, 255), thickness=2)
+    for corner in corners:
+        cv2.circle(image, tuple(corner.astype(int)), 4, color, -1)
 
-def detect_aruco(image, l=.9):
-    """
-    Detect ArUco markers in an image and highlight them.
-    """
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
-    # Detect ArUco markers
-    corners, ids, _ = aruco.detectMarkers(gray, ARUCO_DICT, parameters=PARAMETERS)
-    dP = np.zeros_like(corners)
-
-    if ids is not None:
-        # Get rotated target corners
-        points = get_target_corners((top_left_x, top_left_y), size, yaw_angle)
-        dP = l * (points - corners)
-        aruco.drawDetectedMarkers(image, corners, ids)
-        draw_target_points(image, points)
-    
-    return image, (np.squeeze(corners), np.squeeze(dP)), ids is not None
+    return image
 
 def update_image():
     """
@@ -91,30 +30,33 @@ def update_image():
     """
     global image, cam, coppelia
     if image is not None:
-        image, _, _ = detect_aruco(image, cam.K, np.zeros((5, 1)))
         cv2.imshow('ArUco Detection', image)
 
-def on_trackbar_x(val):
-    """
-    Callback function for the X slider.
-    """
-    global top_left_x
-    top_left_x = val
-    # update_image()
+def detectRGBCircles(image):
+    '''Detects a red, a green and a blue circle in image'''
 
-def on_trackbar_y(val):
-    """
-    Callback function for the Y slider.
-    """
-    global top_left_y
-    top_left_y = val
+    threshold = 250
+    
+    # Split color channels
+    image_red = np.logical_and(image[:,:,2] > threshold, np.logical_and(image[:,:,0] < threshold, image[:,:,1] < threshold))
+    image_green = np.logical_and(image[:,:,1] > threshold, np.logical_and(image[:,:,0] < threshold, image[:,:,2] < threshold))
+    image_blue = np.logical_and(image[:,:,0] > threshold, np.logical_and(image[:,:,1] < threshold, image[:,:,2] < threshold))
 
-def on_trackbar_yaw(val):
-    """
-    Callback function for the Yaw rotation slider.
-    """
-    global yaw_angle
-    yaw_angle = val
+    # Treatment for opencv
+    image_red = 255 * image_red.astype(np.uint8)
+    image_green = 255 * image_green.astype(np.uint8)
+    image_blue = 255 * image_blue.astype(np.uint8)
+    
+    f = np.zeros(6)
+
+    f[0] = 255 * np.sum(_X*image_red)/np.sum(image_red)
+    f[1] = 255 * np.sum(_Y*image_red)/np.sum(image_red)
+    f[2] = 255 * np.sum(_X*image_green)/np.sum(image_green)
+    f[3] = 255 * np.sum(_Y*image_green)/np.sum(image_green)
+    f[4] = 255 * np.sum(_X*image_blue)/np.sum(image_blue)
+    f[5] = 255 * np.sum(_Y*image_blue)/np.sum(image_blue)
+
+    return f
 
 def main():
     global image, cam, coppelia
@@ -122,32 +64,57 @@ def main():
     coppelia = CoppeliaSimAPI()
     coppelia.start_simulation()
 
-    f_rho = 512 / (2 * np.tan(np.pi / 6))
-    cam = CentralCamera(f=f_rho, pp=(256, 256), res=(512, 512))
+    f_rho = IMAGE_RESOLUTION / (2 * np.tan(np.deg2rad(PERSPECTIVE_ANGLE) / 2))
+    cam = CentralCamera(
+        f=f_rho, pp=(IMAGE_RESOLUTION / 2, IMAGE_RESOLUTION / 2),
+        res=(IMAGE_RESOLUTION, IMAGE_RESOLUTION)
+    )
 
     # Create a window for the sliders
     cv2.namedWindow('ArUco Detection')
 
-    # Create trackbars for adjusting the target position and rotation
-    cv2.createTrackbar('Top Left X', 'ArUco Detection', top_left_x, 512, on_trackbar_x)
-    cv2.createTrackbar('Top Left Y', 'ArUco Detection', top_left_y, 512, on_trackbar_y)
-    cv2.createTrackbar('Yaw Rotation', 'ArUco Detection', yaw_angle, 360, on_trackbar_yaw)
-
     try:
         coppelia.set_vision_sensor_handle('/visionSensor')
 
+        p_target = np.array(
+            [
+                [232, 322],
+                [300, 254],
+                [232, 186]
+            ]
+        )
+
         while True:
             image = coppelia.get_image()
-            image, (P, dP), detect = detect_aruco(image)
+            
+            features = detectRGBCircles(image)
 
-            if detect:
-                z = coppelia.get_vision_sensor_height()
+            z = coppelia.get_vision_sensor_height() - 0.01
+
+            if features.all() != 0:
+                p = features.reshape(3, -1).astype(int) * 2 # ????
                 
-                J1 = cam.visjac_p(P[0, :], z)
+                print("RGB Features: ", p)
+                print("Target Features: ", p_target)
+                
+                image = draw_markers(image, p, (255, 0, 255))
+                image = draw_markers(image, p_target, (0, 0, 0))
+            
+                lambda_ = 0.8
 
-                J = np.vstack([J1])
+                J1 = cam.visjac_p(p[0], z)
+                J2 = cam.visjac_p(p[1, :], z)
+                J3 = cam.visjac_p(p[2, :], z)
+                
+                J = np.vstack((J1, J2, J3))
 
-                v = np.linalg.pinv(J) @ dP[0].flatten()
+                e = p_target[0] - p[0]
+
+                e[1] *= -1.
+
+                print("Error: ", e)
+                
+                v = lambda_ * np.linalg.pinv(J1) @ e.flatten()
             else:
                 v = np.zeros(6)
 
@@ -155,6 +122,7 @@ def main():
 
             # Display the image
             cv2.imshow('ArUco Detection', image)
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -164,4 +132,5 @@ def main():
         cv2.destroyAllWindows()
 
 if __name__ == '__main__':
+
     main()

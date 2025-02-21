@@ -77,15 +77,13 @@ class CentralCamera:
 
         Parameters:
         - p: pixel coordinate relative to the principal point (pixel units).
-        - Z: Depth of the points (in meters).
+        - depth: Depth of the points (in meters).
 
         Returns:
         - Image Jacobian as a numpy array of shape (2, 6).
         """
 
         f_rho = self.f / self.rho
-
-        p = p.squeeze()
 
         u, v = p
 
@@ -94,7 +92,7 @@ class CentralCamera:
 
         J = np.array([
             [-f_rho / depth, 0, u / depth, u * v / f_rho, -(f_rho ** 2 + u ** 2) / f_rho, v],
-            [0, -f_rho / depth, v / depth, (f_rho ** 2 + v ** 2) / f_rho, -u * v / f_rho, -u]
+            [0, -f_rho / depth, v / depth, (f_rho ** 2 + v ** 2) / f_rho, -(u * v) / f_rho, -u]
         ])
 
         return J

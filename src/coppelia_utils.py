@@ -36,15 +36,13 @@ class CoppeliaSimAPI:
         # Capture the image
         image, resolution = self.sim.getVisionSensorImg(self.vision_sensor_handle)
         
-        image = np.frombuffer(image, dtype=np.uint8).reshape(resolution[1], resolution[0], 3)
-        
-        # Flip the image vertically (CoppeliaSim returns images upside-down)
-        image = np.flipud(image)
-
-        # Flip the image horizontally (CoppeliaSim returns images flipped)
+        image = np.frombuffer(image, dtype=np.uint8).reshape(
+            resolution[1], resolution[0], 3
+        )
         image = cv2.flip(image, 1)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        return image
+        return image.copy()
     
     def update_camera_pose(self, camera_velocity, dt=50e-3):
         """
