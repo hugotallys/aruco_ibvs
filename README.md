@@ -1,12 +1,12 @@
-# aruco_ibvs
+# ibvs
 
-![ArUco IBVS](aruco_ibvs.png)
+![ArUco IBVS](ibvs.png)
 
-Image based visual servoing using ArUco tags
+Image based visual servoing.
 
 ## Setup and run the simulation:
 
-1. Open the scene `scenes/aruco_ibvs.ttt` in the CoppeliaSim simulator.
+1. Open the scene `scenes/ibvs.ttt` in the CoppeliaSim simulator.
 2. Install python dependencies:
 
 ```console
@@ -18,7 +18,7 @@ pip install -r requirements.txt
 3. Run the simulation:
 
 ```console
-python src/aruco_detector.py
+python src/main.py
 ```
 
 ## Run tests

@@ -36,13 +36,31 @@ class CoppeliaSimAPI:
         # Capture the image
         image, resolution = self.sim.getVisionSensorImg(self.vision_sensor_handle)
         
-        image = np.frombuffer(image, dtype=np.uint8).reshape(
-            resolution[1], resolution[0], 3
-        )
-        image = cv2.flip(image, 1)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = self.sim.unpackUInt8Table(image)
+
+        # Reshape the image
+        image = np.array(image, dtype=np.uint8)
+        image = image.reshape([resolution[1], resolution[0], 3])
+
+        return image
+    
+    def get_depth_image(self):
+        """
+        Capture a depth image from a vision sensor.
+        :param vision_sensor_name: Name of the vision sensor in CoppeliaSim.
+        :return: Depth image as a numpy array (shape: [height, width]).
+        """
         
-        return image.copy()
+        # Capture the depth image
+        depth_image, resolution = self.sim.getVisionSensorDepth(self.vision_sensor_handle)
+
+        depth_image = self.sim.unpackFloatTable(depth_image)
+        
+        # Reshape the depth image
+        depth_image = np.array(depth_image, dtype=np.float32)
+        depth_image = depth_image.reshape([resolution[1], resolution[0]])
+
+        return depth_image
     
     def update_camera_pose(self, camera_velocity, dt=50e-3):
         """
