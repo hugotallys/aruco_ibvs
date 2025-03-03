@@ -62,7 +62,7 @@ class CoppeliaSimAPI:
 
         return depth_image
     
-    def update_camera_pose(self, camera_velocity, dt=50e-3):
+    def update_camera_pose(self, camera_velocity):
         """
         Update the pose of the camera in the scene.
         :param camera_velocity: Velocity of the camera in the scene as a numpy array (shape: [6]).
@@ -75,6 +75,8 @@ class CoppeliaSimAPI:
 
         v = camera_velocity[0:3]
         w = camera_velocity[3:6]
+
+        dt = self.sim.getSimulationTimeStep()
 
         position += v * dt
         orientation += 0.5 * orientation * quaternion(0, *w) * dt

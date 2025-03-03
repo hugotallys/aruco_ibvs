@@ -133,3 +133,9 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Dataset folder
+data/
+
+# Mac OS
+.DS_Store

@@ -7,97 +7,71 @@ from coppelia_utils import CoppeliaSimAPI
 IMAGE_RESOLUTION = 512
 PERSPECTIVE_ANGLE = 60
 
-def detect_red_marker(image):
+DAMPING_FACTOR = 0.8
+GAIN = -0.3
+
+# Set the random seed for reproducibility
+np.random.seed(42)
+
+def detect_marker(image, lower_bound, upper_bound):
     """
-    Detects the center of mass of a red circular marker in the image.
+    Detects the center of mass of a circular marker in the image based on the specified color bounds.
     :param image: Image as a numpy array (shape: [height, width, 3]).
+    :param lower_bound: Lower bound of the HSV color range.
+    :param upper_bound: Upper bound of the HSV color range.
     :return: Center of mass as a tuple (x, y).
     """
-
     # Convert the image to the HSV color space
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    # Define the lower and upper bounds of the red color
+    # Threshold the HSV image to get only the specified color
+    mask = cv2.inRange(hsv, lower_bound, upper_bound)
+
+    # Find contours in the mask
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if contours:
+        # Get the largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+
+        # Compute the center of mass of the largest contour
+        M = cv2.moments(largest_contour)
+        cx = int(M['m10'] / M['m00'])
+        cy = int(M['m01'] / M['m00'])
+
+        return cx, cy
+    else:
+        return None, None
+
+def detect_markers(image):
+    """
+    Detects the centroids of red, green, and blue markers in the image.
+    :param image: Image as a numpy array (shape: [height, width, 3]).
+    :return: Array of shape (2, 3) with the centroids of R, G, and B channels (in that order row-wise).
+    """
+    # Define the lower and upper bounds for each color channel
     lower_red = np.array([0, 100, 100])
     upper_red = np.array([10, 255, 255])
 
-    # Threshold the HSV image to get only red colors
-    mask = cv2.inRange(hsv, lower_red, upper_red)
-
-    # Find contours in the mask
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Get the largest contour
-    largest_contour = max(contours, key=cv2.contourArea)
-
-    # Compute the center of mass of the largest contour
-    M = cv2.moments(largest_contour)
-    cx = int(M['m10'] / M['m00'])
-    cy = int(M['m01'] / M['m00'])
-
-    return cx, cy
-
-def detect_blue_marker(image):
-    """
-    Detects the center of mass of a blue circular marker in the image.
-    :param
-    image: Image as a numpy array (shape: [height, width, 3]).
-    :return: Center of mass as a tuple (x, y).
-    """
-
-    # Convert the image to the HSV color space
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    # Define the lower and upper bounds of the blue color
-    lower_blue = np.array([110, 50, 50])
-    upper_blue = np.array([130, 255, 255])
-
-    # Threshold the HSV image to get only blue colors
-    mask = cv2.inRange(hsv, lower_blue, upper_blue)
-
-    # Find contours in the mask
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Get the largest contour
-    largest_contour = max(contours, key=cv2.contourArea)
-
-    # Compute the center of mass of the largest contour
-    M = cv2.moments(largest_contour)
-    cx = int(M['m10'] / M['m00'])
-    cy = int(M['m01'] / M['m00'])
-
-    return cx, cy
-
-
-def detect_green_marker(image):
-    """
-    Detects the center of mass of a green circular marker in the image.
-    :param image: Image as a numpy array (shape: [height, width, 3]).
-    :return: Center of mass as a tuple (x, y).
-    """
-
-    # Convert the image to the HSV color space
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    # Define the lower and upper bounds of the green color
     lower_green = np.array([50, 100, 100])
     upper_green = np.array([70, 255, 255])
 
-    # Threshold the HSV image to get only green colors
-    mask = cv2.inRange(hsv, lower_green, upper_green)
+    lower_blue = np.array([110, 50, 50])
+    upper_blue = np.array([130, 255, 255])
 
-    # Find contours in the mask
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Detect the centroids of the red, green, and blue markers
+    r_cx, r_cy = detect_marker(image, lower_red, upper_red)
+    g_cx, g_cy = detect_marker(image, lower_green, upper_green)
+    b_cx, b_cy = detect_marker(image, lower_blue, upper_blue)
 
-    # Get the largest contour
-    largest_contour = max(contours, key=cv2.contourArea)
+    # Create an array with the centroids
+    centroids = np.array([
+        [r_cx, r_cy],
+        [g_cx, g_cy],
+        [b_cx, b_cy]
+    ])
 
-    # Compute the center of mass of the largest contour
-    M = cv2.moments(largest_contour)
-    cx = int(M['m10'] / M['m00'])
-    cy = int(M['m01'] / M['m00'])
-
-    return cx, cy
+    return centroids
 
 def main():
     coppelia = CoppeliaSimAPI()
@@ -121,7 +95,7 @@ def main():
 
     p_t = p_t - (IMAGE_RESOLUTION / 2)
 
-    theta = np.deg2rad(45)
+    theta = 0. # np.deg2rad(np.random.uniform(0, 360))
     R = np.array([
         [np.cos(theta), -np.sin(theta)],
         [np.sin(theta), np.cos(theta)]
@@ -133,7 +107,6 @@ def main():
 
     p_t = p_t + np.random.uniform(-100, 100, (1, 2))
 
-
     try:
         coppelia.set_vision_sensor_handle('/visionSensor')
         while True:
@@ -141,15 +114,12 @@ def main():
             try:
             
                 image = coppelia.get_image()
-                r_cx, r_cy = detect_red_marker(image)
-                g_cx, g_cy = detect_green_marker(image)
-                b_cx, b_cy = detect_blue_marker(image)
+                
+                p = detect_markers(image)
 
-                cv2.circle(image, (r_cx, r_cy), 4, (0, 255, 255), -1)
-                cv2.circle(image, (g_cx, g_cy), 4, (255, 0, 255), -1)
-                cv2.circle(image, (b_cx, b_cy), 4, (255, 255, 0), -1)
-
-                p = np.array([[r_cx, r_cy], [g_cx, g_cy], [b_cx, b_cy]])
+                cv2.circle(image, tuple(p[0].astype(np.uint)), 4, (0, 255, 255), -1)
+                cv2.circle(image, tuple(p[1].astype(np.uint)), 4, (255, 0, 255), -1)
+                cv2.circle(image, tuple(p[2].astype(np.uint)), 4, (255, 255, 0), -1)
                 
                 cv2.circle(image, tuple(p_t[0].astype(np.uint)), 4, (0, 255, 255), -1)
                 cv2.circle(image, tuple(p_t[1].astype(np.uint)), 4, (255, 0, 255), -1)
@@ -158,14 +128,12 @@ def main():
                 depth_image = coppelia.get_depth_image()
 
                 z = np.array([
-                    depth_image[r_cy, r_cx],
-                    depth_image[g_cy, g_cx],
-                    depth_image[b_cy, b_cx]
+                    depth_image[p[0][0], p[0][1]],
+                    depth_image[p[1][0], p[1][1]],
+                    depth_image[p[2][0], p[2][1]]
                 ])
 
                 z = 10 * z  + 0.01
-
-                print(f"z = {z}")
 
                 J1 = camera.visjac_p(p[0], z[0])
                 J2 = camera.visjac_p(p[1], z[1])
@@ -173,20 +141,15 @@ def main():
 
                 J = np.vstack((J1, J2, J3))
 
-                damping_factor = 0.8
-
                 # Identity matrix of size 3x3
                 I = np.eye(J.shape[0])
 
                 # Compute the damped pseudo-inverse
-                J_damped_pinv = J.T @ np.linalg.inv(J @ J.T + damping_factor**2 * I)
+                J_damped_pinv = J.T @ np.linalg.inv(J @ J.T + DAMPING_FACTOR**2 * I)
 
-                _lambda = 1.0
-                e = p - p_t
+                e = p_t - p
 
-                print(f"e = {e.flatten().sum()}")
-
-                v = _lambda * J_damped_pinv @ e.flatten()
+                v = GAIN * J_damped_pinv @ e.flatten()
 
                 coppelia.update_camera_pose(v)
             except Exception as e:
