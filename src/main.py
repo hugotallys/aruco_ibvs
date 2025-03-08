@@ -1,169 +1,120 @@
+import time
+import os
 import cv2
 import numpy as np
+import pandas as pd
 
-from camera import CentralCamera
 from coppelia_utils import CoppeliaSimAPI
 
-IMAGE_RESOLUTION = 512
-PERSPECTIVE_ANGLE = 60
+DATASET_SIZE = 100
 
-DAMPING_FACTOR = 0.8
-GAIN = -0.3
+def generate_synthetic_dataset(api: CoppeliaSimAPI, output_folder="dataset"):
+    np.random.seed(42)
 
-# Set the random seed for reproducibility
-np.random.seed(42)
+    # Create output directories
+    images_folder = os.path.join(output_folder, "images")
+    os.makedirs(images_folder, exist_ok=True)
+    csv_file = os.path.join(output_folder, "poses.csv")
 
-def detect_marker(image, lower_bound, upper_bound):
-    """
-    Detects the center of mass of a circular marker in the image based on the specified color bounds.
-    :param image: Image as a numpy array (shape: [height, width, 3]).
-    :param lower_bound: Lower bound of the HSV color range.
-    :param upper_bound: Upper bound of the HSV color range.
-    :return: Center of mass as a tuple (x, y).
-    """
-    # Convert the image to the HSV color space
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    # Threshold the HSV image to get only the specified color
-    mask = cv2.inRange(hsv, lower_bound, upper_bound)
-
-    # Find contours in the mask
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if contours:
-        # Get the largest contour
-        largest_contour = max(contours, key=cv2.contourArea)
-
-        # Compute the center of mass of the largest contour
-        M = cv2.moments(largest_contour)
-        cx = int(M['m10'] / M['m00'])
-        cy = int(M['m01'] / M['m00'])
-
-        return cx, cy
-    else:
-        return None, None
-
-def detect_markers(image):
-    """
-    Detects the centroids of red, green, and blue markers in the image.
-    :param image: Image as a numpy array (shape: [height, width, 3]).
-    :return: Array of shape (2, 3) with the centroids of R, G, and B channels (in that order row-wise).
-    """
-    # Define the lower and upper bounds for each color channel
-    lower_red = np.array([0, 100, 100])
-    upper_red = np.array([10, 255, 255])
-
-    lower_green = np.array([50, 100, 100])
-    upper_green = np.array([70, 255, 255])
-
-    lower_blue = np.array([110, 50, 50])
-    upper_blue = np.array([130, 255, 255])
-
-    # Detect the centroids of the red, green, and blue markers
-    r_cx, r_cy = detect_marker(image, lower_red, upper_red)
-    g_cx, g_cy = detect_marker(image, lower_green, upper_green)
-    b_cx, b_cy = detect_marker(image, lower_blue, upper_blue)
-
-    # Create an array with the centroids
-    centroids = np.array([
-        [r_cx, r_cy],
-        [g_cx, g_cy],
-        [b_cx, b_cy]
-    ])
-
-    return centroids
-
-def main():
-    coppelia = CoppeliaSimAPI()
-    coppelia.start_simulation()
-
-    f_rho = IMAGE_RESOLUTION / (2 * np.tan(np.deg2rad(PERSPECTIVE_ANGLE) / 2))
+    # Start simulation and acquire reference image at 0r (reference pose)
+    api.start_simulation()
+    api.set_vision_sensor_handle("/visionSensor")
     
-    camera = CentralCamera(
-        f=f_rho, pp=(IMAGE_RESOLUTION / 2, IMAGE_RESOLUTION / 2),
-        res=(IMAGE_RESOLUTION, IMAGE_RESOLUTION)
-    )
+    # Let everything settle
+    time.sleep(1)
 
-    cv2.namedWindow("Depth Image")    
-    cv2.namedWindow("Camera Image")
+    ref_position, ref_orientation = api.get_camera_pose()
+    I0 = api.get_image()
 
-    p_t = np.array([
-        [278, 187],
-        [210, 255],
-        [278, 323]
-    ])
+    # Save reference image
+    cv2.imwrite(f"{images_folder}/image_00000.png", cv2.cvtColor(I0, cv2.COLOR_RGB2BGR))
+    ref_pose = np.hstack([ref_position, ref_orientation])
+    poses = [("image_00000.png", *ref_pose)]
 
-    p_t = p_t - (IMAGE_RESOLUTION / 2)
+    # Define Gaussian sampling parameters
+    first_draw_std = np.array([0.01, 0.01, 0.01, 1, 1, 2])
+    second_draw_std = first_draw_std / 100
 
-    theta = 0. # np.deg2rad(np.random.uniform(0, 360))
-    R = np.array([
-        [np.cos(theta), -np.sin(theta)],
-        [np.sin(theta), np.cos(theta)]
-    ])
+    # Generate first DATASET_SIZE samples (coarse sampling)
+    for i in range(1, DATASET_SIZE + 1):
+        perturbed_pose = sample_pose_around(ref_position, ref_orientation, first_draw_std)
+        api.set_camera_pose(*perturbed_pose)
 
-    p_t = (R @ (p_t.T)).T
+        # Capture and save image + pose
+        image = api.get_image()
+        pose = np.hstack([perturbed_pose[0], perturbed_pose[1]])
 
-    p_t = p_t + (IMAGE_RESOLUTION / 2)
+        image_filename = f"image_{i:05d}.png"
+        cv2.imwrite(f"{images_folder}/{image_filename}", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        poses.append((image_filename, *pose))
 
-    p_t = p_t + np.random.uniform(-100, 100, (1, 2))
+    # Generate additional 10% of DATASET_SIZE samples (finer sampling)
+    finer_dataset_size = int(DATASET_SIZE * 0.1)
+    for i in range(DATASET_SIZE + 1, DATASET_SIZE + finer_dataset_size + 1):
+        perturbed_pose = sample_pose_around(ref_position, ref_orientation, second_draw_std)
+        api.set_camera_pose(*perturbed_pose)
 
-    try:
-        coppelia.set_vision_sensor_handle('/visionSensor')
-        while True:
-            
-            try:
-            
-                image = coppelia.get_image()
-                
-                p = detect_markers(image)
+        # Capture and save image + pose
+        image = api.get_image()
+        pose = np.hstack([perturbed_pose[0], perturbed_pose[1]])
 
-                cv2.circle(image, tuple(p[0].astype(np.uint)), 4, (0, 255, 255), -1)
-                cv2.circle(image, tuple(p[1].astype(np.uint)), 4, (255, 0, 255), -1)
-                cv2.circle(image, tuple(p[2].astype(np.uint)), 4, (255, 255, 0), -1)
-                
-                cv2.circle(image, tuple(p_t[0].astype(np.uint)), 4, (0, 255, 255), -1)
-                cv2.circle(image, tuple(p_t[1].astype(np.uint)), 4, (255, 0, 255), -1)
-                cv2.circle(image, tuple(p_t[2].astype(np.uint)), 4, (255, 255, 0), -1)
-                
-                depth_image = coppelia.get_depth_image()
+        image_filename = f"image_{i:05d}.png"
+        cv2.imwrite(f"{images_folder}/{image_filename}", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        poses.append((image_filename, *pose))
 
-                z = np.array([
-                    depth_image[p[0][0], p[0][1]],
-                    depth_image[p[1][0], p[1][1]],
-                    depth_image[p[2][0], p[2][1]]
-                ])
+    # Save poses to CSV file
+    columns = ["image_filename", "pos_x", "pos_y", "pos_z", "alpha", "beta", "gamma"]
+    df = pd.DataFrame(poses, columns=columns)
+    df.to_csv(csv_file, index=False)
 
-                z = 10 * z  + 0.01
+    api.stop_simulation()
+    print("Dataset generation complete!")
 
-                J1 = camera.visjac_p(p[0], z[0])
-                J2 = camera.visjac_p(p[1], z[1])
-                J3 = camera.visjac_p(p[2], z[2])
+def sample_pose_around(reference_position, reference_orientation, std):
+    """
+    Sample a new pose around the reference pose using a 6DOF Gaussian draw.
+    """
+    delta_translation = np.random.normal(0, std[:3])
+    delta_rotation = np.random.normal(0, std[3:])
 
-                J = np.vstack((J1, J2, J3))
+    # Apply translation perturbation
+    new_position = reference_position + delta_translation
 
-                # Identity matrix of size 3x3
-                I = np.eye(J.shape[0])
+    # Apply rotation perturbation (angle-axis representation)
+    new_orientation = reference_orientation + delta_rotation
 
-                # Compute the damped pseudo-inverse
-                J_damped_pinv = J.T @ np.linalg.inv(J @ J.T + DAMPING_FACTOR**2 * I)
+    # Normalize the angle values to lie in the interval [0, 180]
+    new_orientation = np.mod(new_orientation, 360)
+    new_orientation[new_orientation > 180] -= 360
 
-                e = p_t - p
+    return new_position, new_orientation
 
-                v = GAIN * J_damped_pinv @ e.flatten()
+if __name__ == "__main__":
+    
+    output_folder = "data"
 
-                coppelia.update_camera_pose(v)
-            except Exception as e:
-                print(e)
-                coppelia.update_camera_pose(np.zeros(6))
-            
-            cv2.imshow('Depth Image', depth_image)
-            cv2.imshow('Camera Image', image)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-            coppelia.step_simulation()
-    finally:
-        coppelia.stop_simulation()
-        cv2.destroyAllWindows()
+    os.makedirs(output_folder, exist_ok=True)
 
-if __name__ == '__main__':
-    main()
+    api = CoppeliaSimAPI()
+    
+    api.start_simulation()
+
+    api.set_vision_sensor_handle("/visionSensor")
+
+    position, orientation = api.get_camera_pose()
+
+    pose = np.hstack([position, orientation])
+
+    first_draw_std = np.array([0.1, 0.1, 0.1, 0.2, 0.2, 0.4])
+    
+    for _ in range(100):
+
+        perturbed_pose = sample_pose_around(position, orientation, first_draw_std)
+
+        api.set_camera_pose(perturbed_pose[0], perturbed_pose[1])
+
+        time.sleep(0.5)
+
+    api.stop_simulation()
+
+    # generate_synthetic_dataset(api, output_folder)

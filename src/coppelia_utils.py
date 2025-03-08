@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 
-from quaternion import quaternion, as_float_array
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
 class CoppeliaSimAPI:
@@ -44,34 +43,14 @@ class CoppeliaSimAPI:
 
         return image
     
-    def get_depth_image(self):
-        """
-        Capture a depth image from a vision sensor.
-        :param vision_sensor_name: Name of the vision sensor in CoppeliaSim.
-        :return: Depth image as a numpy array (shape: [height, width]).
-        """
-        
-        # Capture the depth image
-        depth_image, resolution = self.sim.getVisionSensorDepth(self.vision_sensor_handle)
-
-        depth_image = self.sim.unpackFloatTable(depth_image)
-        
-        # Reshape the depth image
-        depth_image = np.array(depth_image, dtype=np.float32)
-        depth_image = depth_image.reshape([resolution[1], resolution[0]])
-
-        return depth_image
-    
     def update_camera_pose(self, camera_velocity):
         """
         Update the pose of the camera in the scene.
         :param camera_velocity: Velocity of the camera in the scene as a numpy array (shape: [6]).
         """
         
-        camera_pose = self.sim.getObjectPose(self.vision_sensor_handle)
-
-        position = np.array(camera_pose[0:3])
-        orientation = quaternion(*np.roll(np.array(camera_pose[3:7]), 1))
+        position = np.array(self.sim.getObjectPosition(self.vision_sensor_handle))
+        orientation = np.array(self.sim.getObjectOrientation(self.vision_sensor_handle))
 
         v = camera_velocity[0:3]
         w = camera_velocity[3:6]
@@ -79,12 +58,10 @@ class CoppeliaSimAPI:
         dt = self.sim.getSimulationTimeStep()
 
         position += v * dt
-        orientation += 0.5 * orientation * quaternion(0, *w) * dt
-       
-        orientation = np.roll(as_float_array(orientation), -1)
-        camera_pose = position.tolist() + orientation.tolist()
+        orientation += w * dt
 
-        self.sim.setObjectPose(self.vision_sensor_handle, camera_pose)
+        self.sim.setObjectPosition(self.vision_sensor_handle, position.tolist())
+        self.sim.setObjectOrientation(self.vision_sensor_handle, orientation.tolist())
 
     def step_simulation(self):
         """Advance the simulation by one step."""
@@ -97,3 +74,12 @@ class CoppeliaSimAPI:
     def get_vision_sensor_height(self):
         """Get the height of the vision sensor."""
         return self.sim.getObjectPosition(self.vision_sensor_handle)[2]
+    
+    def get_camera_pose(self):
+        position = np.array(self.sim.getObjectPosition(self.vision_sensor_handle))
+        orientation = np.array(self.sim.getObjectOrientation(self.vision_sensor_handle))
+        return position, orientation
+    
+    def set_camera_pose(self, position, orientation):
+        self.sim.setObjectPosition(self.vision_sensor_handle, position.tolist())
+        self.sim.setObjectOrientation(self.vision_sensor_handle, orientation.tolist())
