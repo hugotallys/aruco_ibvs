@@ -71,17 +71,17 @@ class CoppeliaSimAPI:
         camera_pose = self.sim.getObjectPose(self.vision_sensor_handle)
 
         position = np.array(camera_pose[0:3])
-        orientation = quaternion(*np.roll(np.array(camera_pose[3:7]), 1))
+        orientation = quaternion(*np.array(camera_pose[3:7]))
 
         v = camera_velocity[0:3]
         w = camera_velocity[3:6]
-
+    
         dt = self.sim.getSimulationTimeStep()
 
         position += v * dt
         orientation += 0.5 * orientation * quaternion(0, *w) * dt
        
-        orientation = np.roll(as_float_array(orientation), -1)
+        orientation = as_float_array(orientation)
         camera_pose = position.tolist() + orientation.tolist()
 
         self.sim.setObjectPose(self.vision_sensor_handle, camera_pose)

@@ -7,8 +7,8 @@ from coppelia_utils import CoppeliaSimAPI
 IMAGE_RESOLUTION = 512
 PERSPECTIVE_ANGLE = 60
 
-DAMPING_FACTOR = 0.8
-GAIN = -0.3
+DAMPING_FACTOR = 0.01
+GAIN = 0.1
 
 # Set the random seed for reproducibility
 np.random.seed(42)
@@ -59,16 +59,21 @@ def detect_markers(image):
     lower_blue = np.array([110, 50, 50])
     upper_blue = np.array([130, 255, 255])
 
+    lower_magenta = np.array([140, 100, 100])
+    upper_magenta = np.array([160, 255, 255])
+
     # Detect the centroids of the red, green, and blue markers
     r_cx, r_cy = detect_marker(image, lower_red, upper_red)
     g_cx, g_cy = detect_marker(image, lower_green, upper_green)
     b_cx, b_cy = detect_marker(image, lower_blue, upper_blue)
+    m_cx, m_cy = detect_marker(image, lower_magenta, upper_magenta)
 
     # Create an array with the centroids
     centroids = np.array([
         [r_cx, r_cy],
         [g_cx, g_cy],
-        [b_cx, b_cy]
+        [b_cx, b_cy],
+        [m_cx, m_cy]
     ])
 
     return centroids
@@ -90,12 +95,13 @@ def main():
     p_t = np.array([
         [278, 187],
         [210, 255],
-        [278, 323]
+        [278, 323],
+        [346, 255]
     ])
 
     p_t = p_t - (IMAGE_RESOLUTION / 2)
 
-    theta = 0. # np.deg2rad(np.random.uniform(0, 360))
+    theta = 0 # np.deg2rad(np.random.uniform(0, 360))
     R = np.array([
         [np.cos(theta), -np.sin(theta)],
         [np.sin(theta), np.cos(theta)]
@@ -120,17 +126,20 @@ def main():
                 cv2.circle(image, tuple(p[0].astype(np.uint)), 4, (0, 255, 255), -1)
                 cv2.circle(image, tuple(p[1].astype(np.uint)), 4, (255, 0, 255), -1)
                 cv2.circle(image, tuple(p[2].astype(np.uint)), 4, (255, 255, 0), -1)
-                
+                cv2.circle(image, tuple(p[3].astype(np.uint)), 4, (0, 0, 255), -1)
+
                 cv2.circle(image, tuple(p_t[0].astype(np.uint)), 4, (0, 255, 255), -1)
                 cv2.circle(image, tuple(p_t[1].astype(np.uint)), 4, (255, 0, 255), -1)
                 cv2.circle(image, tuple(p_t[2].astype(np.uint)), 4, (255, 255, 0), -1)
-                
+                cv2.circle(image, tuple(p_t[3].astype(np.uint)), 4, (0, 0, 255), -1)
+
                 depth_image = coppelia.get_depth_image()
 
                 z = np.array([
                     depth_image[p[0][0], p[0][1]],
                     depth_image[p[1][0], p[1][1]],
-                    depth_image[p[2][0], p[2][1]]
+                    depth_image[p[2][0], p[2][1]],
+                    depth_image[p[3][0], p[3][1]]
                 ])
 
                 z = 10 * z  + 0.01
@@ -138,8 +147,9 @@ def main():
                 J1 = camera.visjac_p(p[0], z[0])
                 J2 = camera.visjac_p(p[1], z[1])
                 J3 = camera.visjac_p(p[2], z[2])
+                J4 = camera.visjac_p(p[3], z[3])
 
-                J = np.vstack((J1, J2, J3))
+                J = np.vstack((J1, J2, J3, J4))
 
                 # Identity matrix of size 3x3
                 I = np.eye(J.shape[0])
@@ -150,6 +160,19 @@ def main():
                 e = p_t - p
 
                 v = GAIN * J_damped_pinv @ e.flatten()
+                
+                # only 4 decimals precision print
+
+                with np.printoptions(precision=4, suppress=True):
+                    # print(f"J={J}")
+                    # print(f"J_damped_pinv={J_damped_pinv}")
+                    # print(f"e={e}")
+                    print(f"v={v}")
+
+                # v = np.zeros(6)
+
+                v[0] = -v[0]
+                v[3:6] = 0.
 
                 coppelia.update_camera_pose(v)
             except Exception as e:

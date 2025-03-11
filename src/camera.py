@@ -1,4 +1,5 @@
 import numpy as np
+from spatialmath import SE3
 
 class CentralCamera:
     def __init__(self, f, rho=1, pp=(256, 256), res=(512, 512)):
@@ -35,7 +36,7 @@ class CentralCamera:
         Returns:
         - CentralCamera object.
         """
-        return cls(f=8e-3, rho=10e-6, pp=(500, 500), res=(1000, 1000))
+        return cls(f=8e-3, rho=10e-6, pp=(512, 512), res=(1024, 1024))
 
     def project_point(self, p, pose=None):
         """
@@ -43,28 +44,28 @@ class CentralCamera:
 
         Parameters:
         - p: 3D world points as a numpy array of shape (3, N), where N is the number of points.
-        - camera_pose: SE3 transformation matrix (4x4) representing the camera pose relative to the world frame. If None, the camera is assumed to be at the origin.
+        - pose: SE3 transformation matrix representing the camera pose relative to the world frame. If None, the camera is assumed to be at the origin.
 
         Returns:
         - Pixel coordinates as a numpy array of shape (2, N).
         """
-        # Make sure P is an array
+        # Make sure p is an array
         if not isinstance(p, np.ndarray):
             p = np.array(p)
 
         p = p.reshape(3, -1)
 
-        # Add aditional 1 so p is in homogenous coordinates
+        # Add additional 1 so p is in homogeneous coordinates
         p = np.vstack((p, np.ones(p.shape[1])))
 
         # Apply camera pose (if provided)
         if pose is None:
-            pose = np.eye(4)
-        
+            pose = SE3()
+
         pi = np.hstack((np.eye(3), np.zeros((3, 1))))
 
         # Project points using the intrinsic matrix
-        p_pixel = self.K @ pi @ np.linalg.inv(pose) @ p
+        p_pixel = self.K @ pi @ np.linalg.inv(pose.A) @ p
 
         # Normalize the pixel coordinates
         p_pixel = p_pixel[:2] / p_pixel[2]
