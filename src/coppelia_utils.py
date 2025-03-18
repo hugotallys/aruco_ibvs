@@ -42,6 +42,15 @@ class CoppeliaSimAPI:
         image = np.array(image, dtype=np.uint8)
         image = image.reshape([resolution[1], resolution[0], 3])
 
+        # Flips the image vertically
+        image = cv2.flip(image, 0)
+
+        # Flips the image horizontally
+        image = cv2.flip(image, 1)
+
+        # Convert the image from BGR to RGB
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
         return image
     
     def get_depth_image(self):
@@ -71,7 +80,9 @@ class CoppeliaSimAPI:
         camera_pose = self.sim.getObjectPose(self.vision_sensor_handle)
 
         position = np.array(camera_pose[0:3])
-        orientation = quaternion(*np.array(camera_pose[3:7]))
+        orientation = np.array(camera_pose[3:7])
+        orientation = np.roll(orientation, 1)
+        orientation = quaternion(*orientation)
 
         v = camera_velocity[0:3]
         w = camera_velocity[3:6]
@@ -79,9 +90,10 @@ class CoppeliaSimAPI:
         dt = self.sim.getSimulationTimeStep()
 
         position += v * dt
-        orientation += 0.5 * orientation * quaternion(0, *w) * dt
-       
+        orientation += 0.5 * quaternion(0, *w) * orientation * dt
+
         orientation = as_float_array(orientation)
+        orientation = np.roll(orientation, -1)
         camera_pose = position.tolist() + orientation.tolist()
 
         self.sim.setObjectPose(self.vision_sensor_handle, camera_pose)
