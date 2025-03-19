@@ -7,11 +7,9 @@ from coppelia_utils import CoppeliaSimAPI
 IMAGE_RESOLUTION = 512
 PERSPECTIVE_ANGLE = 60
 
-DAMPING_FACTOR = 0.1
+DAMPING_FACTOR = 0.005
 GAIN = 0.2
 
-# Set the random seed for reproducibility
-np.random.seed(42)
 
 def detect_markers_by_color(image):
     """
@@ -112,9 +110,12 @@ def main():
         [165, 255]
     ])
 
+    # Pure rotation
+
+    pure_rotation = 1.
     p_t = p_t - (IMAGE_RESOLUTION / 2)
 
-    theta = 0.*np.deg2rad(np.random.uniform(0, 45))
+    theta = pure_rotation * np.deg2rad(np.random.uniform(10, 30))
     R = np.array([
         [np.cos(theta), -np.sin(theta)],
         [np.sin(theta), np.cos(theta)]
@@ -124,7 +125,19 @@ def main():
 
     p_t = p_t + (IMAGE_RESOLUTION / 2)
 
-    p_t = p_t + np.random.uniform(-100, 100, (1, 2))
+    # Pure translation
+
+    pure_translation = 0.
+    p_t = p_t + pure_translation * np.random.uniform(-50, 50, (1, 2))
+
+    # Scale the square size to simulate camera zoom in/out
+    # camera_zoom = 0.5
+    # p_c = p_t - (IMAGE_RESOLUTION / 2)
+    # p_c = camera_zoom * p_c
+    # p_t = p_c + (IMAGE_RESOLUTION / 2)
+
+    iter_count = 0
+    max_iter = 200
 
     try:
         coppelia.set_vision_sensor_handle('/visionSensor')
@@ -171,14 +184,26 @@ def main():
 
                 J = np.vstack((J1, J2, J3, J4))
 
-                # Identity matrix of size 3x3
+                # z = 0.5 * z
+
+                J1_t = camera.visjac_p(p_t[0], z[0])
+                J2_t = camera.visjac_p(p_t[1], z[1])
+                J3_t = camera.visjac_p(p_t[2], z[2])
+                J4_t = camera.visjac_p(p_t[3], z[3])
+
+                J_t = np.vstack((J1_t, J2_t, J3_t, J4_t))
+
                 I = np.eye(J.shape[0])
+
+                J = 0.5 * (J + J_t)
 
                 e = p_t - p
 
                 J_DAMPED = J.T @ np.linalg.inv(J @ J.T + DAMPING_FACTOR ** 2 * I)
 
                 v = GAIN * J_DAMPED @ e.flatten()
+
+                # v = GAIN * 0.5 * (np.linalg.pinv(J) + np.linalg.pinv(J_t)) @ e.flatten()
 
                 coppelia.update_camera_pose(v)
 
@@ -201,6 +226,9 @@ def main():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
             coppelia.step_simulation()
+            iter_count += 1
+            if iter_count >= max_iter:
+                break
     finally:
         coppelia.stop_simulation()
         cv2.destroyAllWindows()
