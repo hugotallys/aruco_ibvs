@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 
-from quaternion import quaternion, as_float_array
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
 class CoppeliaSimAPI:
@@ -71,32 +70,87 @@ class CoppeliaSimAPI:
 
         return depth_image
     
+    @staticmethod
+    def get_rotation_matrix_from_euler(yaw, pitch, roll):
+        """
+        Get a rotation matrix from Euler angles.
+        :param roll: Roll angle in radians.
+        :param pitch: Pitch angle in radians.
+        :param yaw: Yaw angle in radians.
+        :return: Rotation matrix as a numpy array (shape: [3, 3]).
+        """
+        R_x = np.array([[1, 0, 0],
+                        [0, np.cos(roll), -np.sin(roll)],
+                        [0, np.sin(roll), np.cos(roll)]])
+
+        R_y = np.array([[np.cos(pitch), 0, np.sin(pitch)],
+                        [0, 1, 0],
+                        [-np.sin(pitch), 0, np.cos(pitch)]])
+
+        R_z = np.array([[np.cos(yaw), -np.sin(yaw), 0],
+                        [np.sin(yaw), np.cos(yaw), 0],
+                        [0, 0, 1]])
+
+        R = R_z @ R_y @ R_x
+
+        return R
+
     def update_camera_pose(self, camera_velocity):
         """
         Update the pose of the camera in the scene.
         :param camera_velocity: Velocity of the camera in the scene as a numpy array (shape: [6]).
         """
-        
-        camera_pose = self.sim.getObjectPose(self.vision_sensor_handle)
+        # camera_position = self.sim.getObjectPosition(self.vision_sensor_handle)
+        # camera_orientation = self.sim.getObjectOrientation(self.vision_sensor_handle)
 
-        position = np.array(camera_pose[0:3])
-        orientation = np.array(camera_pose[3:7])
-        orientation = np.roll(orientation, 1)
-        orientation = quaternion(*orientation)
+        # yaw, pitch, roll = self.sim.alphaBetaGammaToYawPitchRoll(*camera_orientation)
 
-        v = camera_velocity[0:3]
-        w = camera_velocity[3:6]
-    
+        # camera_orientation = [yaw, pitch, roll]
+
+        # print(f"Camera position = {camera_position}")
+        # print(f"Camera orientation = {camera_orientation}")
+
+        # camera_position = np.array(camera_position).reshape(-1, 1)
+        # camera_orientation = np.array(camera_orientation).reshape(-1, 1)
+
+        # print(f"Camera position = {camera_position}")
+        # print(f"Camera orientation = {camera_orientation}")
+
         dt = self.sim.getSimulationTimeStep()
 
-        position += v * dt
-        orientation += 0.5 * quaternion(0, *w) * orientation * dt
+        # cam_rot = self.get_rotation_matrix_from_euler(
+        #     yaw=camera_orientation[0][0], pitch=camera_orientation[1][0], roll=camera_orientation[2][0]
+        # ).T
 
-        orientation = as_float_array(orientation)
-        orientation = np.roll(orientation, -1)
-        camera_pose = position.tolist() + orientation.tolist()
+        # print(f"Camera Matrix = {cam_rot}")
 
-        self.sim.setObjectPose(self.vision_sensor_handle, camera_pose)
+        # v = np.array(camera_velocity[0:3]).reshape(-1, 1)
+        # w = np.array(camera_velocity[3:6]).reshape(-1, 1)
+
+        # print(f"Velocity = {v}")
+        # print(f"Angular Velocity = {w}")
+
+        # # Converts linear and angular velocities to world frame
+        # v = cam_rot @ v
+        # w = cam_rot @ w
+
+        # # Update the camera position
+
+        # print(f"w = {w}")
+        # print(f"reversed(w) = {w[::-1]}")
+
+        v = np.array(camera_velocity[0:3]) 
+        w = np.array(camera_velocity[3:6])
+
+        w = w[::-1]
+
+        alpha, beta, gamma = self.sim.yawPitchRollToAlphaBetaGamma(*w)
+
+        w = np.array([alpha, beta, gamma])
+
+        # Set the new camera pose
+        self.sim.setObjectPosition(self.vision_sensor_handle, (v * dt).tolist(), self.vision_sensor_handle)        
+        self.sim.setObjectOrientation(self.vision_sensor_handle, (w * dt).tolist(), self.vision_sensor_handle)
 
     def step_simulation(self):
         """Advance the simulation by one step."""
@@ -109,3 +163,7 @@ class CoppeliaSimAPI:
     def get_vision_sensor_height(self):
         """Get the height of the vision sensor."""
         return self.sim.getObjectPosition(self.vision_sensor_handle)[2]
+    
+    def get_vision_sensor_pose(self):
+        """Get the pose of the vision sensor."""
+        return self.sim.getObjectPose(self.vision_sensor_handle)
