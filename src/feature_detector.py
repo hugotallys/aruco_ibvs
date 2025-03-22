@@ -136,3 +136,36 @@ class FeatureDetector:
         :return: numpy array of shape [n, 2] with feature coordinates
         """
         return np.array([detected[color] for color in order])
+    
+    def draw_features(self, image, detected_points, target_points=None, colors=None, radius=4):
+        """
+        Draw detected and optionally target feature points on the image.
+        
+        Parameters:
+        - image: The image to draw on (will be modified in-place)
+        - detected_points: Array of detected feature points with shape [n, 2]
+        - target_points: Optional array of target feature points with shape [n, 2]
+        - colors: List of BGR colors for each feature point. Defaults to [(0,255,0), (255,0,0), (0,0,255), (0,0,0)]
+        - radius: Radius of the circles to draw
+        
+        Returns:
+        - Modified image with features drawn
+        """
+        # Default colors if not provided (Green, Blue, Red, Black)
+        if colors is None:
+            colors = [(0, 255, 0), (255, 0, 0), (0, 0, 255), (0, 0, 0)]
+        
+        # Ensure we have enough colors for all points
+        if len(colors) < detected_points.shape[0]:
+            colors = colors * (detected_points.shape[0] // len(colors) + 1)
+        
+        # Draw detected points
+        for i, point in enumerate(detected_points):
+            cv2.circle(image, tuple(point.astype(np.int32)), radius, colors[i], -1)
+        
+        # Draw target points if provided
+        if target_points is not None:
+            for i, point in enumerate(target_points):
+                cv2.circle(image, tuple(point.astype(np.int32)), radius, colors[i], -1)
+        
+        return image

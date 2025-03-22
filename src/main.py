@@ -40,6 +40,9 @@ def main():
     p_t = detector.translate_features(p_t, np.array([50, 50]))
     p_t = detector.scale_features(p_t, 1.5)
 
+    # Define colors for the features (BGR format)
+    colors = [(0, 255, 0), (255, 0, 0), (0, 0, 255), (0, 0, 0)]
+
     try:
         while True:
             try:
@@ -52,17 +55,7 @@ def main():
                 p = detector.get_detected_features_as_array(detected)
 
                 # Draw detected and target features
-                cv2.circle(image, tuple(p[0].astype(np.uint)), 4, (0, 255, 0), -1)
-                cv2.circle(image, tuple(p_t[0].astype(np.uint)), 4, (0, 255, 0), -1)
-
-                cv2.circle(image, tuple(p[1].astype(np.uint)), 4, (255, 0, 0), -1)
-                cv2.circle(image, tuple(p_t[1].astype(np.uint)), 4, (255, 0, 0), -1)
-
-                cv2.circle(image, tuple(p[2].astype(np.uint)), 4, (0, 0, 255), -1)
-                cv2.circle(image, tuple(p_t[2].astype(np.uint)), 4, (0, 0, 255), -1)
-
-                cv2.circle(image, tuple(p[3].astype(np.uint)), 4, (0, 0, 0), -1)
-                cv2.circle(image, tuple(p_t[3].astype(np.uint)), 4, (0, 0, 0), -1)
+                image = detector.draw_features(image, p, p_t, colors)
 
                 # Get depth image
                 depth_image = coppelia.get_depth_image()
@@ -76,6 +69,7 @@ def main():
                 ])
 
                 z = 10 * z + 0.01
+                z = 15 * np.ones_like(z)
 
                 # Calculate Jacobians
                 J = camera.visjac_p(p, z)
