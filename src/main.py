@@ -7,8 +7,7 @@ from coppelia_utils import CoppeliaSimAPI
 IMAGE_RESOLUTION = 512
 PERSPECTIVE_ANGLE = 60
 
-DAMPING_FACTOR = 0.01
-GAIN = 0.2
+GAIN = 0.1
 
 
 def detect_markers_by_color(image):
@@ -98,13 +97,20 @@ def rotate_features(p, theta):
         [np.sin(theta), np.cos(theta)]
     ])
 
-    return (R @ (p.T)).T
+    p = (R @ (p.T)).T
+
+    p = p + (IMAGE_RESOLUTION / 2)
+
+    return p
 
 def translate_features(p, translation):
     return p + translation
 
 def scale_features(p, scale):
-    return scale * p
+    p = p - (IMAGE_RESOLUTION / 2)
+    p = scale * p
+    p = p + (IMAGE_RESOLUTION / 2)
+    return p
 
 
 def main():
@@ -129,34 +135,15 @@ def main():
     ])
 
     # Pure rotation
+    p_t = rotate_features(p_t, np.deg2rad(45))
 
-    theta = np.deg2rad(15)
-    p_t = p_t - (IMAGE_RESOLUTION / 2)
+    # # Pure translation
+    p_t = translate_features(p_t, np.array([50, 50]))
 
-    R = np.array([
-        [np.cos(theta), -np.sin(theta)],
-        [np.sin(theta), np.cos(theta)]
-    ])
-
-    p_t = (R @ (p_t.T)).T
-
-    p_t = p_t + (IMAGE_RESOLUTION / 2)
-
-    # Pure translation
-    pure_translation = 0
-    p_t = p_t + np.array([pure_translation, 0])
-
-    # Scale the square size to simulate camera zoom in/out
-    camera_zoom = 1.0
-    p_c = p_t - (IMAGE_RESOLUTION / 2)
-    p_c = camera_zoom * p_c
-    p_t = p_c + (IMAGE_RESOLUTION / 2)
-
-    iter_count = 0
-    max_iter = 500
+    # # # Pure scaling
+    p_t = scale_features(p_t, 1.5)
 
     try:
-        coppelia.set_vision_sensor_handle('/visionSensor')
         while True:
             try:
                 image = coppelia.get_image()
@@ -200,8 +187,6 @@ def main():
 
                 J = np.vstack((J1, J2, J3, J4))
 
-                # z = 0.5 * z
-
                 J1_t = camera.visjac_p(p_t[0], 0.5)
                 J2_t = camera.visjac_p(p_t[1], 0.5)
                 J3_t = camera.visjac_p(p_t[2], 0.5)
@@ -209,23 +194,13 @@ def main():
 
                 J_t = np.vstack((J1_t, J2_t, J3_t, J4_t))
 
-                I = np.eye(J.shape[0])
-
                 J = 0.5 * (J + J_t)
 
-                # J = J_t
-
                 e = p_t - p
-
-                # J_DAMPED = J.T @ np.linalg.inv(J @ J.T + DAMPING_FACTOR ** 2 * I)
 
                 v = GAIN * np.linalg.pinv(J) @ e.flatten()
 
                 coppelia.update_camera_pose(v)
-
-                # if np.linalg.norm(e) < np.sqrt(4*5):
-                #     print("Target reached!")
-                #     break
 
                 with np.printoptions(precision=2, suppress=True):
                     print(f"Error: {e}")
@@ -237,14 +212,11 @@ def main():
                 print(e)
                 coppelia.update_camera_pose(np.zeros(6))
             
-            # cv2.imshow('Depth Image', depth_image)
+            cv2.imshow('Depth Image', depth_image)
             cv2.imshow('Camera Image', image)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
             coppelia.step_simulation()
-            iter_count += 1
-            # if iter_count >= max_iter:
-            #     break
     finally:
         coppelia.stop_simulation()
         cv2.destroyAllWindows()
