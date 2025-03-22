@@ -57,23 +57,12 @@ def main():
                 # Draw detected and target features
                 image = detector.draw_features(image, p, p_t, colors)
 
-                # Get depth image
-                depth_image = coppelia.get_depth_image()
-
-                # Extract depth values at feature locations
-                z = np.array([
-                    depth_image[p[0][0], p[0][1]],
-                    depth_image[p[1][0], p[1][1]],
-                    depth_image[p[2][0], p[2][1]],
-                    depth_image[p[3][0], p[3][1]]
-                ])
-
-                z = 10 * z + 0.01
-                z = 15 * np.ones_like(z)
+                # Assume depth is 1. for all points (both detected and target)
+                z = np.full_like(p[:, 0], 1.)
 
                 # Calculate Jacobians
                 J = camera.visjac_p(p, z)
-                J_t = camera.visjac_p(p_t, np.ones_like(z)) # Just assume final depth is 1
+                J_t = camera.visjac_p(p_t, z)
 
                 J = 0.5 * (J + J_t)
 
@@ -96,7 +85,6 @@ def main():
                 coppelia.update_camera_pose(np.zeros(6))
             
             # Display images
-            cv2.imshow('Depth Image', depth_image)
             cv2.imshow('Camera Image', image)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break

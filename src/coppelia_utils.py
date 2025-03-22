@@ -48,24 +48,6 @@ class CoppeliaSimAPI:
 
         return image
     
-    def get_depth_image(self):
-        """
-        Capture a depth image from a vision sensor.
-        :param vision_sensor_name: Name of the vision sensor in CoppeliaSim.
-        :return: Depth image as a numpy array (shape: [height, width]).
-        """
-        
-        # Capture the depth image
-        depth_image, resolution = self.sim.getVisionSensorDepth(self.vision_sensor_handle)
-
-        depth_image = self.sim.unpackFloatTable(depth_image)
-        
-        # Reshape the depth image
-        depth_image = np.array(depth_image, dtype=np.float32)
-        depth_image = depth_image.reshape([resolution[1], resolution[0]])
-
-        return depth_image
-
     def update_camera_pose(self, camera_velocity):
         """
         Update the pose of the camera in the scene.
