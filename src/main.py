@@ -78,19 +78,8 @@ def main():
                 z = 10 * z + 0.01
 
                 # Calculate Jacobians
-                J1 = camera.visjac_p(p[0], z[0])
-                J2 = camera.visjac_p(p[1], z[1])
-                J3 = camera.visjac_p(p[2], z[2])
-                J4 = camera.visjac_p(p[3], z[3])
-
-                J = np.vstack((J1, J2, J3, J4))
-
-                J1_t = camera.visjac_p(p_t[0], 0.5)
-                J2_t = camera.visjac_p(p_t[1], 0.5)
-                J3_t = camera.visjac_p(p_t[2], 0.5)
-                J4_t = camera.visjac_p(p_t[3], 0.5)
-
-                J_t = np.vstack((J1_t, J2_t, J3_t, J4_t))
+                J = camera.visjac_p(p, z)
+                J_t = camera.visjac_p(p_t, np.ones_like(z)) # Just assume final depth is 1
 
                 J = 0.5 * (J + J_t)
 

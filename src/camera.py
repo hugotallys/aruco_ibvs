@@ -77,23 +77,37 @@ class CentralCamera:
         Compute the image Jacobian for a set of points.
 
         Parameters:
-        - p: pixel coordinate relative to the principal point (pixel units).
-        - depth: Depth of the points (in meters).
+        - p: Pixel coordinates as a numpy array of shape (n, 2), where n is the number of points.
+        - depth: Depth of the points (in meters) as a numpy array of shape (n,).
 
         Returns:
-        - Image Jacobian as a numpy array of shape (2, 6).
+        - Stacked image Jacobian as a numpy array of shape (2*n, 6).
         """
-
+        # Make sure inputs are numpy arrays
+        p = np.asarray(p)
+        depth = np.asarray(depth)
+        
         f_rho = self.f / self.rho
-
-        u, v = p
-
-        u = u - self.pp[0]
-        v = v - self.pp[1]
-
-        J = np.array([
-            [-f_rho / depth, 0, u / depth, u * v / f_rho, -(f_rho ** 2 + u ** 2) / f_rho, v],
-            [0, -f_rho / depth, v / depth, (f_rho ** 2 + v ** 2) / f_rho, -(u * v) / f_rho, -u]
-        ])
-
-        return J
+        n_points = p.shape[0]
+        
+        # Initialize the stacked Jacobian
+        J_stacked = np.zeros((2 * n_points, 6))
+        
+        # Process each point and build the stacked Jacobian
+        for i in range(n_points):
+            u, v = p[i]
+            
+            # Shift coordinates to be relative to principal point
+            u = u - self.pp[0]
+            v = v - self.pp[1]
+            
+            # Calculate Jacobian for this point
+            Ji = np.array([
+                [-f_rho / depth[i], 0, u / depth[i], u * v / f_rho, -(f_rho**2 + u**2) / f_rho, v],
+                [0, -f_rho / depth[i], v / depth[i], (f_rho**2 + v**2) / f_rho, -(u * v) / f_rho, -u]
+            ])
+            
+            # Add to the stacked Jacobian
+            J_stacked[2*i:2*i+2, :] = Ji
+        
+        return J_stacked
